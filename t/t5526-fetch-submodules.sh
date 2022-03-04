@@ -12,8 +12,9 @@ pwd=$(pwd)
 
 check_sub () {
 	NEW_HEAD=$1 &&
+	SUPER_HEAD=$2 &&
 	cat >$pwd/expect.err.sub <<-EOF
-	Fetching submodule submodule
+	Fetching submodule submodule${SUPER_HEAD:+ at commit $SUPER_HEAD}
 	From $pwd/submodule
 	   OLD_HEAD..$NEW_HEAD  sub        -> origin/sub
 	EOF
@@ -21,8 +22,9 @@ check_sub () {
 
 check_deep () {
 	NEW_HEAD=$1 &&
+	SUB_HEAD=$2 &&
 	cat >$pwd/expect.err.deep <<-EOF
-	Fetching submodule submodule/subdir/deepsubmodule
+	Fetching submodule submodule/subdir/deepsubmodule${SUB_HEAD:+ at commit $SUB_HEAD}
 	From $pwd/deepsubmodule
 	   OLD_HEAD..$NEW_HEAD  deep       -> origin/deep
 	EOF
@@ -399,6 +401,7 @@ test_expect_success "'--recurse-submodules=on-demand' doesn't recurse when no ne
 '
 
 test_expect_success "'--recurse-submodules=on-demand' recurses as deep as necessary (and ignores config)" '
+	add_submodule_commits &&
 	add_superproject_commits &&
 	(
 		cd downstream &&
@@ -416,6 +419,155 @@ test_expect_success "'--recurse-submodules=on-demand' recurses as deep as necess
 	) &&
 	test_must_be_empty actual.out &&
 	verify_fetch_result actual.err
+'
+
+# Test that we can fetch submodules in other branches by running fetch
+# in a commit that has no submodules.
+test_expect_success 'setup downstream branch without submodules' '
+	(
+		cd downstream &&
+		git checkout --recurse-submodules -b no-submodules &&
+		git rm .gitmodules &&
+		git rm submodule &&
+		git commit -m "no submodules" &&
+		git checkout --recurse-submodules super
+	)
+'
+
+test_expect_success "'--recurse-submodules=on-demand' should fetch submodule commits if the submodule is changed but the index has no submodules" '
+	add_submodule_commits &&
+	add_superproject_commits &&
+	# Fetch the new superproject commit
+	(
+		cd downstream &&
+		git switch --recurse-submodules no-submodules &&
+		git fetch --recurse-submodules=on-demand >../actual.out 2>../actual.err
+	) &&
+	super_head=$(git rev-parse --short HEAD) &&
+	sub_head=$(git -C submodule rev-parse --short HEAD) &&
+	deep_head=$(git -C submodule/subdir/deepsubmodule rev-parse --short HEAD) &&
+
+	# assert that these are fetched from commits, not the index
+	check_sub $sub_head $super_head &&
+	check_deep $deep_head $sub_head &&
+
+	test_must_be_empty actual.out &&
+	verify_fetch_result actual.err
+'
+
+test_expect_success "'--recurse-submodules' should fetch submodule commits if the submodule is changed but the index has no submodules" '
+	add_submodule_commits &&
+	add_superproject_commits &&
+	# Fetch the new superproject commit
+	(
+		cd downstream &&
+		git switch --recurse-submodules no-submodules &&
+		git fetch --recurse-submodules >../actual.out 2>../actual.err
+	) &&
+	super_head=$(git rev-parse --short HEAD) &&
+	sub_head=$(git -C submodule rev-parse --short HEAD) &&
+	deep_head=$(git -C submodule/subdir/deepsubmodule rev-parse --short HEAD) &&
+
+	# assert that these are fetched from commits, not the index
+	check_sub $sub_head $super_head &&
+	check_deep $deep_head $sub_head &&
+
+	test_must_be_empty actual.out &&
+	verify_fetch_result actual.err
+'
+
+test_expect_success "'--recurse-submodules' should ignore changed, inactive submodules" '
+	add_submodule_commits &&
+	add_superproject_commits &&
+
+	# Fetch the new superproject commit
+	(
+		cd downstream &&
+		git switch --recurse-submodules no-submodules &&
+		git -c submodule.submodule.active=false fetch --recurse-submodules >../actual.out 2>../actual.err
+	) &&
+	test_must_be_empty actual.out &&
+	super_head=$(git rev-parse --short HEAD) &&
+	check_super $super_head &&
+	# Neither should be fetched because the submodule is inactive
+	rm expect.err.sub &&
+	rm expect.err.deep &&
+	verify_fetch_result actual.err
+'
+
+# In downstream, init "submodule2", but do not check it out while
+# fetching. This lets us assert that unpopulated submodules can be
+# fetched.
+test_expect_success 'setup downstream branch with other submodule' '
+	mkdir submodule2 &&
+	(
+		cd submodule2 &&
+		git init &&
+		echo sub2content >sub2file &&
+		git add sub2file &&
+		git commit -a -m new &&
+		git branch -M sub2
+	) &&
+	git checkout -b super-sub2-only &&
+	git submodule add "$pwd/submodule2" submodule2 &&
+	git commit -m "add sub2" &&
+	git checkout super &&
+	(
+		cd downstream &&
+		git fetch --recurse-submodules origin &&
+		git checkout super-sub2-only &&
+		# Explicitly run "git submodule update" because sub2 is new
+		# and has not been cloned.
+		git submodule update --init &&
+		git checkout --recurse-submodules super
+	)
+'
+
+test_expect_success "'--recurse-submodules' should fetch submodule commits in changed submodules and the index" '
+	# Create new commit in origin/super
+	add_submodule_commits &&
+	add_superproject_commits &&
+
+	# Create new commit in origin/super-sub2-only
+	git checkout super-sub2-only &&
+	(
+		cd submodule2 &&
+		test_commit --no-tag foo
+	) &&
+	git add submodule2 &&
+	git commit -m "new submodule2" &&
+
+	git checkout super &&
+	(
+		cd downstream &&
+		git fetch --recurse-submodules >../actual.out 2>../actual.err
+	) &&
+	test_must_be_empty actual.out &&
+	deep_head=$(git -C submodule/subdir/deepsubmodule rev-parse --short HEAD) &&
+	sub_head=$(git -C submodule rev-parse --short HEAD) &&
+	sub2_head=$(git -C submodule2 rev-parse --short HEAD) &&
+	super_head=$(git rev-parse --short HEAD) &&
+	super_sub2_only_head=$(git rev-parse --short super-sub2-only) &&
+
+	# Use test_cmp manually because verify_fetch_result does not
+	# consider submodule2. All the repos should be fetched, but only
+	# submodule2 should be read from a commit
+	cat > expect.err.combined <<-EOF &&
+	From $pwd/.
+	   OLD_HEAD..$super_head  super           -> origin/super
+	   OLD_HEAD..$super_sub2_only_head  super-sub2-only -> origin/super-sub2-only
+	Fetching submodule submodule
+	From $pwd/submodule
+	   OLD_HEAD..$sub_head  sub        -> origin/sub
+	Fetching submodule submodule/subdir/deepsubmodule
+	From $pwd/deepsubmodule
+	   OLD_HEAD..$deep_head  deep       -> origin/deep
+	Fetching submodule submodule2 at commit $super_sub2_only_head
+	From $pwd/submodule2
+	   OLD_HEAD..$sub2_head  sub2       -> origin/sub2
+	EOF
+	sed -e "s/[0-9a-f][0-9a-f]*\.\./OLD_HEAD\.\./" actual.err >actual.err.cmp &&
+	test_cmp expect.err.combined actual.err.cmp
 '
 
 test_expect_success "'--recurse-submodules=on-demand' stops when no new submodule commits are found in the superproject (and ignores config)" '
@@ -858,6 +1010,113 @@ test_expect_success 'recursive fetch after deinit a submodule' '
 	git -C superclone submodule status >out &&
 	sed -e "s/^-//" -e "s/ sub$//" out >actual &&
 	test_cmp expect actual
+'
+
+test_expect_success 'setup repo with upstreams that share a submodule name' '
+	mkdir same-name-1 &&
+	(
+		cd same-name-1 &&
+		git init -b main &&
+		test_commit --no-tag a
+	) &&
+	git clone same-name-1 same-name-2 &&
+	# same-name-1 and same-name-2 both add a submodule with the
+	# name "submodule"
+	(
+		cd same-name-1 &&
+		mkdir submodule &&
+		git -C submodule init -b main &&
+		test_commit -C submodule --no-tag a1 &&
+		git submodule add "$pwd/same-name-1/submodule" &&
+		git add submodule &&
+		git commit -m "super-a1"
+	) &&
+	(
+		cd same-name-2 &&
+		mkdir submodule &&
+		git -C submodule init -b main &&
+		test_commit -C submodule --no-tag a2 &&
+		git submodule add "$pwd/same-name-2/submodule" &&
+		git add submodule &&
+		git commit -m "super-a2"
+	) &&
+	git clone same-name-1 -o same-name-1 same-name-downstream &&
+	(
+		cd same-name-downstream &&
+		git remote add same-name-2 ../same-name-2 &&
+		git fetch --all &&
+		# init downstream with same-name-1
+		git submodule update --init
+	)
+'
+
+test_expect_success 'fetch --recurse-submodules updates name-conflicted, populated submodule' '
+	test_when_finished "git -C same-name-downstream checkout main" &&
+	(
+		cd same-name-1 &&
+		test_commit -C submodule --no-tag b1 &&
+		git add submodule &&
+		git commit -m "super-b1"
+	) &&
+	(
+		cd same-name-2 &&
+		test_commit -C submodule --no-tag b2 &&
+		git add submodule &&
+		git commit -m "super-b2"
+	) &&
+	(
+		cd same-name-downstream &&
+		# even though the .gitmodules is correct, we cannot
+		# fetch from same-name-2
+		git checkout same-name-2/main &&
+		git fetch --recurse-submodules same-name-1 &&
+		test_must_fail git fetch --recurse-submodules same-name-2
+	) &&
+	super_head1=$(git -C same-name-1 rev-parse HEAD) &&
+	git -C same-name-downstream cat-file -e $super_head1 &&
+
+	super_head2=$(git -C same-name-2 rev-parse HEAD) &&
+	git -C same-name-downstream cat-file -e $super_head2 &&
+
+	sub_head1=$(git -C same-name-1/submodule rev-parse HEAD) &&
+	git -C same-name-downstream/submodule cat-file -e $sub_head1 &&
+
+	sub_head2=$(git -C same-name-2/submodule rev-parse HEAD) &&
+	test_must_fail git -C same-name-downstream/submodule cat-file -e $sub_head2
+'
+
+test_expect_success 'fetch --recurse-submodules updates name-conflicted, unpopulated submodule' '
+	(
+		cd same-name-1 &&
+		test_commit -C submodule --no-tag c1 &&
+		git add submodule &&
+		git commit -m "super-c1"
+	) &&
+	(
+		cd same-name-2 &&
+		test_commit -C submodule --no-tag c2 &&
+		git add submodule &&
+		git commit -m "super-c2"
+	) &&
+	(
+		cd same-name-downstream &&
+		git checkout main &&
+		git rm .gitmodules &&
+		git rm submodule &&
+		git commit -m "no submodules" &&
+		git fetch --recurse-submodules same-name-1
+	) &&
+	head1=$(git -C same-name-1/submodule rev-parse HEAD) &&
+	head2=$(git -C same-name-2/submodule rev-parse HEAD) &&
+	(
+		cd same-name-downstream/.git/modules/submodule &&
+		# The submodule has core.worktree pointing to the "git
+		# rm"-ed directory, overwrite the invalid value. See
+		# comment in get_fetch_task_from_changed() for more
+		# information.
+		git --work-tree=. cat-file -e $head1 &&
+		test_must_fail git --work-tree=. cat-file -e $head2
+	)
 '
 
 test_done
