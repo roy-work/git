@@ -521,7 +521,8 @@ ARFLAGS = rcs
 #   perllibdir
 # This can help installing the suite in a relocatable way.
 
-prefix = $(HOME)
+#prefix = $(HOME)
+prefix = /srv/git
 bindir = $(prefix)/bin
 mandir = $(prefix)/share/man
 infodir = $(prefix)/share/info
