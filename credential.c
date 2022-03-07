@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include "cache.h"
 #include "config.h"
 #include "credential.h"
@@ -333,15 +334,20 @@ void credential_fill(struct credential *c)
 {
 	int i;
 
-	if (c->username && c->password)
+	if (c->username && c->password) {
+		fprintf(stderr, "Early abort: we have credentials.\n");
 		return;
+	}
 
 	credential_apply_config(c);
 
 	for (i = 0; i < c->helpers.nr; i++) {
+		fprintf(stderr, "attempting credential helper: %s\n", c->helpers.items[i].string);
 		credential_do(c, c->helpers.items[i].string, "get");
-		if (c->username && c->password)
+		if (c->username && c->password) {
+			fprintf(stderr, "Mid abort: we have obtained credentials.\n");
 			return;
+		}
 		if (c->quit)
 			die("credential helper '%s' told us to quit",
 			    c->helpers.items[i].string);

@@ -437,6 +437,7 @@ static int http_options(const char *var, const char *value, void *cb)
 		} else if (!*value) {
 			string_list_clear(&extra_http_headers, 0);
 		} else {
+			fprintf(stderr, "http.extraheader = %s\n", value);
 			string_list_append(&extra_http_headers, value);
 		}
 		return 0;
@@ -1633,6 +1634,7 @@ static int handle_curl_result(struct slot_results *results)
 	normalize_curl_result(&results->curl_result, results->http_code,
 			      curl_errorstr, sizeof(curl_errorstr));
 
+    fprintf(stderr, "handle_curl_result: HTTP code %ld\n", results->http_code);
 	if (results->curl_result == CURLE_OK) {
 		credential_approve(&http_auth);
 		if (proxy_auth.password)
@@ -1956,6 +1958,10 @@ static int http_request(const char *url,
 		}
 	}
 
+	for(struct curl_slist *ptr = headers; ptr; ptr = ptr->next) {
+		fprintf(stderr, "http_request: header: %s\n", ptr->data);
+	}
+
 	curl_easy_setopt(slot->curl, CURLOPT_URL, url);
 	curl_easy_setopt(slot->curl, CURLOPT_HTTPHEADER, headers);
 	curl_easy_setopt(slot->curl, CURLOPT_ENCODING, "");
@@ -2037,10 +2043,16 @@ static int http_request_reauth(const char *url,
 			       void *result, int target,
 			       struct http_get_options *options)
 {
+	fprintf(stderr, "http_request_reauth: url = %s\n", url);
+	for(unsigned int idx = 0; idx < options->extra_headers->nr; ++idx) {
+		fprintf(stderr, "http_request_reauth: extra_header: %s\n", options->extra_headers->items[idx].string);
+	}
 	int ret = http_request(url, result, target, options);
 
+	fprintf(stderr, "http_request_reauth: enter, ret = %d\n", ret);
 	if (ret != HTTP_OK && ret != HTTP_REAUTH)
 		return ret;
+	fprintf(stderr, "http_request_reauth: 1\n");
 
 	if (options && options->effective_url && options->base_url) {
 		if (update_url_from_redirect(options->base_url,
@@ -2052,6 +2064,7 @@ static int http_request_reauth(const char *url,
 
 	if (ret != HTTP_REAUTH)
 		return ret;
+	fprintf(stderr, "http_request_reauth: 2\n");
 
 	/*
 	 * The previous request may have put cruft into our output stream; we
@@ -2064,11 +2077,13 @@ static int http_request_reauth(const char *url,
 	case HTTP_REQUEST_FILE:
 		if (fflush(result)) {
 			error_errno("unable to flush a file");
+			fprintf(stderr, "http_request_reauth: 3, exit\n");
 			return HTTP_START_FAILED;
 		}
 		rewind(result);
 		if (ftruncate(fileno(result), 0) < 0) {
 			error_errno("unable to truncate a file");
+			fprintf(stderr, "http_request_reauth: 4, exit\n");
 			return HTTP_START_FAILED;
 		}
 		break;
@@ -2076,6 +2091,7 @@ static int http_request_reauth(const char *url,
 		BUG("Unknown http_request target");
 	}
 
+	fprintf(stderr, "http_request_reauth: 5, filling creds\n");
 	credential_fill(&http_auth);
 
 	return http_request(url, result, target, options);

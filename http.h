@@ -129,6 +129,7 @@ extern enum http_follow_config http_follow_config;
 
 static inline int missing__target(int code, int result)
 {
+	fprintf(stderr, "missing__target(%d, %d)\n", code, result);
 	return	/* file:// URL -- do we ever use one??? */
 		(result == CURLE_FILE_COULDNT_READ_FILE) ||
 		/* http:// and https:// URL */

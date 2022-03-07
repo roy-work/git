@@ -522,7 +522,8 @@ GIT-VERSION-FILE: FORCE
 #   perllibdir
 # This can help installing the suite in a relocatable way.
 
-prefix = $(HOME)
+#prefix = $(HOME)
+prefix = /srv/git
 bindir = $(prefix)/bin
 mandir = $(prefix)/share/man
 infodir = $(prefix)/share/info
@@ -1184,7 +1185,8 @@ endif
 # Set CFLAGS, LDFLAGS and other *FLAGS variables. These might be
 # tweaked by config.* below as well as the command-line, both of
 # which'll override these defaults.
-CFLAGS = -g -O2 -Wall
+#CFLAGS = -g -O2 -Wall
+CFLAGS = -g -Wall
 LDFLAGS =
 CC_LD_DYNPATH = -Wl,-rpath,
 BASIC_CFLAGS = -I.
