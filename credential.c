@@ -328,6 +328,8 @@ void credential_reject(struct credential *c)
 	c->approved = 0;
 }
 
+char *strchrnul(char *, char);
+
 void credential_from_url(struct credential *c, const char *url)
 {
 	fprintf(stderr, "c_from_url: enter\n");
