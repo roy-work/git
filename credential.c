@@ -330,9 +330,13 @@ void credential_reject(struct credential *c)
 
 void credential_from_url(struct credential *c, const char *url)
 {
+	fprintf(stderr, "c_from_url: enter\n");
+	fprintf(stderr, "c_from_url: url = %s\n", url);
 	const char *at, *colon, *cp, *slash, *host, *proto_end;
 
+	fprintf(stderr, "c_from_url: #0\n");
 	credential_clear(c);
+	fprintf(stderr, "c_from_url: #1\n");
 
 	/*
 	 * Match one of:
@@ -340,15 +344,25 @@ void credential_from_url(struct credential *c, const char *url)
 	 *   (2) proto://<user>@<host>/...
 	 *   (3) proto://<user>:<pass>@<host>/...
 	 */
+	fprintf(stderr, "c_from_url: #2\n");
 	proto_end = strstr(url, "://");
+	fprintf(stderr, "c_from_url: #3\n");
 	if (!proto_end)
 		return;
+	fprintf(stderr, "c_from_url: #4\n");
+	fprintf(stderr, "c_from_url: proto_end = %s\n", proto_end);
 	cp = proto_end + 3;
+	fprintf(stderr, "c_from_url: cp = %s\n", cp);
 	at = strchr(cp, '@');
+	fprintf(stderr, "c_from_url: at = %s\n", at);
 	colon = strchr(cp, ':');
+	fprintf(stderr, "c_from_url: colon = %s\n", colon);
 	slash = strchrnul(cp, '/');
+	fprintf(stderr, "c_from_url: slash = %s\n", slash);
+	fprintf(stderr, "c_from_url: #5\n");
 
 	if (!at || slash <= at) {
+		fprintf(stderr, "c_from_url: case (1)\n");
 		/* Case (1) */
 		host = cp;
 	}
@@ -362,14 +376,19 @@ void credential_from_url(struct credential *c, const char *url)
 		c->password = url_decode_mem(colon + 1, at - (colon + 1));
 		host = at + 1;
 	}
+	fprintf(stderr, "c_from_url: #6\n");
 
 	if (proto_end - url > 0)
 		c->protocol = xmemdupz(url, proto_end - url);
+	fprintf(stderr, "c_from_url: #6.1\n");
 	if (slash - host > 0)
 		c->host = url_decode_mem(host, slash - host);
+	fprintf(stderr, "c_from_url: #6.2\n");
+	fprintf(stderr, "c_from_url: slack = %s\n", slash);
 	/* Trim leading and trailing slashes from path */
 	while (*slash == '/')
 		slash++;
+	fprintf(stderr, "c_from_url: #7\n");
 	if (*slash) {
 		char *p;
 		c->path = url_decode(slash);
@@ -377,4 +396,5 @@ void credential_from_url(struct credential *c, const char *url)
 		while (p > c->path && *p == '/')
 			*p-- = '\0';
 	}
+	fprintf(stderr, "c_from_url: ret\n");
 }

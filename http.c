@@ -1018,6 +1018,7 @@ static void set_from_env(const char **var, const char *envname)
 
 void http_init(struct remote *remote, const char *url, int proactive_auth)
 {
+	fprintf(stderr, "http_init #0");
 	char *low_speed_limit;
 	char *low_speed_time;
 	char *normalized_url;
@@ -1061,6 +1062,7 @@ void http_init(struct remote *remote, const char *url, int proactive_auth)
 		}
 	}
 #endif
+	fprintf(stderr, "http_init #1");
 
 	if (curl_global_init(CURL_GLOBAL_ALL) != CURLE_OK)
 		die("curl_global_init failed");
@@ -1073,6 +1075,7 @@ void http_init(struct remote *remote, const char *url, int proactive_auth)
 	if (remote)
 		var_override(&http_proxy_authmethod, remote->http_proxy_authmethod);
 
+	fprintf(stderr, "http_init #2");
 	pragma_header = curl_slist_append(http_copy_default_headers(),
 		"Pragma: no-cache");
 	no_pragma_header = curl_slist_append(http_copy_default_headers(),
@@ -1090,6 +1093,7 @@ void http_init(struct remote *remote, const char *url, int proactive_auth)
 		die("curl_multi_init failed");
 #endif
 
+	fprintf(stderr, "http_init #3");
 	if (getenv("GIT_SSL_NO_VERIFY"))
 		curl_ssl_verify = 0;
 
@@ -1122,18 +1126,24 @@ void http_init(struct remote *remote, const char *url, int proactive_auth)
 
 	if (getenv("GIT_CURL_FTP_NO_EPSV"))
 		curl_ftp_no_epsv = 1;
+	fprintf(stderr, "http_init #4\n");
 
 	if (url) {
+		fprintf(stderr, "http_init #4.1\n");
 		credential_from_url(&http_auth, url);
+		fprintf(stderr, "http_init #4.2\n");
 		if (!ssl_cert_password_required &&
 		    getenv("GIT_SSL_CERT_PASSWORD_PROTECTED") &&
 		    starts_with(url, "https://"))
 			ssl_cert_password_required = 1;
+		fprintf(stderr, "http_init #4.3\n");
 	}
 
+	fprintf(stderr, "http_init #5");
 #ifndef NO_CURL_EASY_DUPHANDLE
 	curl_default = get_curl_handle();
 #endif
+	fprintf(stderr, "http_init ret");
 }
 
 void http_cleanup(void)

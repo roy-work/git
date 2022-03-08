@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include "cache.h"
 #include "config.h"
 #include "remote.h"
@@ -1325,6 +1326,7 @@ static int stateless_connect(const char *service_name)
 
 int cmd_main(int argc, const char **argv)
 {
+	fprintf(stderr, "Point A0\n");
 	struct strbuf buf = STRBUF_INIT;
 	int nongit;
 
@@ -1341,6 +1343,7 @@ int cmd_main(int argc, const char **argv)
 	string_list_init(&options.push_options, 1);
 
 	remote = remote_get(argv[1]);
+	fprintf(stderr, "Point A\n");
 
 	if (argc > 2) {
 		end_url_with_slash(&url, argv[2]);
@@ -1348,7 +1351,9 @@ int cmd_main(int argc, const char **argv)
 		end_url_with_slash(&url, remote->url[0]);
 	}
 
+	fprintf(stderr, "Point B\n");
 	http_init(remote, url.buf, 0);
+	fprintf(stderr, "Point C\n");
 
 	do {
 		const char *arg;
@@ -1360,6 +1365,7 @@ int cmd_main(int argc, const char **argv)
 		}
 		if (buf.len == 0)
 			break;
+		fprintf(stderr, "Point D, buf = %s\n", buf.buf);
 		if (starts_with(buf.buf, "fetch ")) {
 			if (nongit)
 				die("remote-curl: fetch attempted without a local repo");
